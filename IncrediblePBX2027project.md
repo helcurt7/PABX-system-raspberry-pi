@@ -2,7 +2,7 @@ This is the final, unified **2026 Master Writeup** for your **PABX Infrastructur
 
 ---
 
-# 🎖️ 2026 Military Order: PABX Master Manual
+# 🎖️ 2026 : PABX Master Manual
 
 **Target:** Incredible PBX 2027 (Raspberry Pi 4)
 
@@ -171,3 +171,70 @@ For your WebRTC extension (e.g., 999), ensure these **Advanced** settings are ti
 * **Register Timeout:** Check `/var/log/fail2ban.log`. You might have banned yourself. Unban with `fail2ban-client set asterisk unbanip <your-ip>`.
 * **No Audio:** 99% of the time, this is the **UDP 10000-20000** forwarding missing on the router.
 * **WebSocket Fail:** Did you do the "Browser Trick" (Phase 4, Step 2)?
+
+
+
+Part 1: The "Redirect" Explanation
+You asked: "wss://avoip.duckdns.org:8089/ws this will redirect to where?"
+It acts like a tunnel, not a web page redirect:
+ * You (Outside): Your browser yells "Connect!" to avoip.duckdns.org on port 8089.
+ * The Public Internet: Finds your Router's Public IP.
+ * The Router (Next Week): Sees a request on 8089. It looks at its "Map" (Port Forwarding) and says, "Ah, 8089 belongs to the internal device 192.168.50.32."
+ * The Destination: The traffic hits your Raspberry Pi on 192.168.50.32:8089, where Asterisk picks it up.
+Part 2: The Master Writeup (Copy & Paste)
+Goal: Secure WebSockets (WSS) and Mobile SIP (UDP) on Incredible PBX 2027.
+Prerequisite: Router installed with Port Forwarding active.
+Phase A: The Router Setup (Do this first next week)
+Log into the router (Gateway) and forward these ports to 192.168.50.32:
+ * TCP 80 (HTTP - Required for SSL Certificate generation)
+ * TCP 8089 (WSS - The Secure WebSocket Tunnel)
+ * UDP 5060 (SIP - For Zoiper Mobile)
+ * UDP 10000-20000 (RTP - Audio Path)
+Phase B: The CLI "Success" Commands (Run these on the Pi)
+These are the commands you successfully ran today. Run them again if you ever reinstall or to confirm everything is locked in.
+1. Automate DuckDNS (The Heartbeat)
+Ensures your domain always points to your router.
+# Create the script
+nano /usr/local/bin/duckdns.sh
+
+# PASTE THIS INSIDE NANO (Replace YOUR_TOKEN):
+# echo url="https://www.duckdns.org/update?domains=avoip&token=YOUR_TOKEN&ip=" | curl -k -o /var/log/duck.log -K -
+# (Save with Ctrl+O, Enter, Ctrl+X)
+
+# Make it executable and schedule it
+chmod +x /usr/local/bin/duckdns.sh
+(crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/bin/duckdns.sh >/dev/null 2>&1") | crontab -
+
+2. Whitelist & Firewall (The Bouncer)
+Tells the firewall to trust your DuckDNS address and open the WebSocket port.
+# Whitelist your domain (Choose options 1,2,4,8 when asked)
+/root/add-fqdn ComtechAdmin avoip.duckdns.org
+
+# Manually force open the WebSocket port (The "Success Command")
+iptables -I INPUT -p tcp --dport 8089 -j ACCEPT
+iptables-save > /etc/iptables/rules.v4
+
+3. Generate SSL Certificate (The Green Lock)
+Crucial: This only works AFTER the Router Port 80 forwarding is done.
+/root/pks-certs
+# Follow prompts. Enter domain: avoip.duckdns.org
+
+Phase C: The GUI Configuration
+Log into https://192.168.50.32
+ * Activate the Certificate:
+   * Go to Settings → Certificate Manager.
+   * Find the "avoip.duckdns.org" cert. Click the Arrow/Check icon to set as "Default".
+ * Configure SIP Transport:
+   * Go to Settings → Asterisk SIP Settings → PJSIP Tab.
+   * Certificate Manager: Select "avoip.duckdns.org".
+   * SSL Method: Default.
+   * Verify Client: No.
+   * External IP: Click "Detect Network Settings" (It should find your DuckDNS IP).
+ * Enable User WebRTC:
+   * Applications → Extensions → Edit User (1001).
+   * Advanced Tab → Enable WebRTC: Yes.
+Phase D: The Connection String (For your App)
+When building your Web Phone or configuring a client:
+ * WebSocket URL: wss://avoip.duckdns.org:8089/ws
+ * SIP Domain: avoip.duckdns.org
+ * Port: 8089
