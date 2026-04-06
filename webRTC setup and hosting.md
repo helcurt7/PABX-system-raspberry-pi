@@ -151,3 +151,67 @@ Applying configurations in the FreePBX GUI is not enough to bind new transport p
   ```
 2. **Browser Trust:** Open a new browser tab and visit **`https://avoip.duckdns.org:8089/ws`**. Ensure it displays a white screen reading **"Upgrade Required"** to confirm the port is open and trusted.
 3. **Connection Test:** Open a WebRTC client (e.g., [tryit.jssip.net](https://tryit.jssip.net/)), input your SIP URI (`sip:101@avoip.duckdns.org`), password, and WebSocket URI (`wss://avoip.duckdns.org:8089/ws`). Connect to verify the green registration status, then try calling your physical desk phone!
+
+
+Bro, you're 100% right. That 32-second cutoff was specifically the RTP timeout hitting its limit because the audio hadn't "latched" yet. Increasing it to 300 bought us the time to see the audio finally pass through.
+
+Here is the **Ultimate Final Version** of your troubleshooting log. I’ve added the comparison between the WebRTC (101) and Hardware (1002) setups, included the RTP timeout fix, and cleaned up the navigation. This is exactly what you need for your Comtech2u report.
+
+---
+
+# WebRTC & FreePBX: The Ultimate Troubleshooting Log
+
+## Problem 1: The 30-Second Call Delay & Silence
+**The Symptom:** When hitting "Call", the webpage froze for 30 seconds before ringing.
+**The Cause:** **STUN Timeout.** The JS code was trying to reach Google/Cloudflare STUN servers to find a public IP. On 5G and certain Ruijie office networks, these requests are blocked. The browser waits for a timeout before failing over to a direct connection.
+**The Fix:** Empty the `iceServers` array. Since we use `Rewrite Contact` on the server, the browser doesn't need to know its own IP; Asterisk will figure it out automatically.
+* **Where:** `public/index.html` -> `pcConfig`
+* **Code:** `iceServers: []`
+
+## Problem 2: The 32-Second Automatic Hangup (The "Ghost" Call)
+**The Symptom:** Call connects, but drops at exactly 32 seconds.
+**The Cause:** **Missing ACK & RTP Timeout.** 1.  **ACK:** The 5G firewall swallowed the "Handshake" confirmation. Asterisk thinks the call never started.
+2.  **RTP Timeout:** Because the audio path was still being negotiated, the default 30-second "Silence" timer hit. By increasing this to 300, we stopped the "Auto-End" and allowed the 5G tunnel enough time to stabilize.
+
+**The Fix:**
+* **Navigation:** `Settings` > `Asterisk SIP Settings` > `General SIP Settings`
+* **Settings:** `RTP Timeout` -> **300** | `RTP Keep Alive` -> **10**
+* **Extension 101 Settings:** `Rewrite Contact` -> **Yes** | `Force rport` -> **Yes**
+
+## Problem 3: WebRTC vs. Hardware Phone (The "Secret Formula")
+**The Symptom:** WebRTC (101) needs high security; Hardware (1002) needs raw speed. Mixing them causes "One-Way Audio."
+**The Cause:** Mismatched Encryption and Codecs. Chrome *requires* DTLS/AVPF. The NEC phone *cannot* use them.
+
+**The Fix (The Comparison Table):**
+
+| Feature | WebRTC Extension (101) | Hardware NEC Phone (1002) |
+| :--- | :--- | :--- |
+| **Enable AVPF** | **Yes** (Required by Chrome) | **No** (Breaks hardware) |
+| **ICE Support** | **Yes** | **No** |
+| **Media Encryption** | **DTLS-SRTP** | **None** |
+| **DTLS Setup** | **Act/Pass** | **Disabled** |
+| **Use Certificate** | **DuckDNS / Let's Encrypt** | **None / Default** |
+| **Allowed Codecs** | **ulaw** (strictly) | **ulaw** (strictly) |
+| **Direct Media** | **No** | **No** |
+
+## Problem 4: Codec "Garbage" Audio
+**The Symptom:** Call connects, but one side is deaf.
+**The Cause:** **Codec Mismatch.** The NEC phone tried to use `alaw` (European/Asia standard) while Chrome demanded `ulaw` (US/Web standard). Asterisk failed to translate because both were allowed in the settings.
+**The Fix:** Force **strictly** `ulaw` on both ends.
+* **Settings:** `Disallowed Codecs: all` | `Allowed Codecs: ulaw`
+
+---
+
+### The "Magic" Command: `fwconsole restart`
+**Why we use it:** The FreePBX "Apply Config" button only updates the database. It does **not** reset the active UDP ports or the ICE session manager.
+**When to use:** Whenever you change:
+1.  NAT Settings (External IP/Stun)
+2.  DTLS Certificates
+3.  RTP Timeouts
+
+
+
+### Final Summary for Internship Report:
+> "Successfully deployed a Raspberry Pi-based PABX system using Incredible PBX. Integrated a custom React/JsSIP full-stack web application. Resolved critical WebRTC hurdles including 5G CGNAT traversal via SIP header manipulation (Rewrite Contact), bypassed STUN-related latency by implementing local-first ICE gathering, and established a secure DTLS-SRTP bridge to facilitate communication between unencrypted legacy hardware (NEC Desk Phones) and modern browser-based endpoints."
+
+---
