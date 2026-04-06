@@ -215,3 +215,103 @@ Here is the **Ultimate Final Version** of your troubleshooting log. I’ve added
 > "Successfully deployed a Raspberry Pi-based PABX system using Incredible PBX. Integrated a custom React/JsSIP full-stack web application. Resolved critical WebRTC hurdles including 5G CGNAT traversal via SIP header manipulation (Rewrite Contact), bypassed STUN-related latency by implementing local-first ICE gathering, and established a secure DTLS-SRTP bridge to facilitate communication between unencrypted legacy hardware (NEC Desk Phones) and modern browser-based endpoints."
 
 ---
+
+# Tech Note: Resolving "One-Way Audio" in Dynamic IP Environments
+
+## The Problem: The "Ghost IP" Loophole
+**Symptom:** You can call out and they can hear you, but you hear **absolute silence** (One-Way Audio).
+**The Cause:** Asterisk is a "Signaling Engine." When it starts a call, it sends a packet to your phone saying: *"Hey, send your voice audio to this IP address: [External Address]."*
+* **The Conflict:** If you put `avoip.duckdns.org` in the **External Address** box, Asterisk often fails to resolve the DNS fast enough. It sends a "junk" header to your phone. 
+* **The Result:** Your phone receives the call but has no valid "Target" to send the audio to. The audio packets are sent to a "Ghost IP" or dropped entirely, leaving you deaf to your friend's voice.
+
+## The Solution: Static vs. Dynamic Mapping
+To have perfect two-way audio, Asterisk **must** have a numeric Public IP (e.g., `60.54.227.64`) stamped in its configuration. However, since your ISP changes your IP frequently, manually typing this is inefficient.
+
+### Phase 1: Manual "GPS" Synchronization (The Quick Fix)
+Whenever the office router restarts or the IP changes:
+1. **Navigate:** `Settings` > `Asterisk SIP Settings` > `General SIP Settings`.
+2. **Action:** Click the **[Detect Network Settings]** button. 
+3. **Effect:** FreePBX will ping a lookup server, find your current numeric Public IP, and auto-fill the box.
+4. **Finalize:** Click **Submit** and **Apply Config**.
+
+### Phase 2: Automating the Update
+
+Here is exactly how to build and automate your IP Updater Script.
+
+### Step 1: Create the Script
+Open your Raspberry Pi terminal (SSH) and create a new file:
+```bash
+nano /root/update_pbx_ip.sh
+```
+
+### Step 2: Paste the Code
+Copy and paste this exact code into the terminal. *(This script resolves your DuckDNS, compares it to the last known IP, and updates the FreePBX database if it detects a change).*
+
+```bash
+#!/bin/bash
+
+# 1. Define your DuckDNS domain
+DOMAIN="avoip.duckdns.org"
+
+# 2. Get the current numeric IP of your DuckDNS
+CURRENT_IP=$(dig +short $DOMAIN | tail -n1)
+
+# 3. Read the last IP we saved (if the file doesn't exist, it stays blank)
+OLD_IP=$(cat /root/last_known_ip.txt 2>/dev/null)
+
+# 4. Check if the IP is valid and if it has changed
+if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "$OLD_IP" ]; then
+    echo "IP change detected: $OLD_IP -> $CURRENT_IP. Updating FreePBX..."
+    
+    # 5. Inject the new IP directly into the FreePBX database
+    mysql -u root asterisk -e "UPDATE sipsettings SET data='$CURRENT_IP' WHERE keyword='externip';"
+    
+    # 6. Force FreePBX to rebuild the config files and reload the engine
+    fwconsole reload
+    asterisk -rx "pjsip reload"
+    
+    # 7. Save the new IP so we don't reboot it again until it changes
+    echo "$CURRENT_IP" > /root/last_known_ip.txt
+    
+    echo "PBX successfully updated to new IP!"
+else
+    # If the IP is the same, do nothing.
+    echo "IP has not changed ($CURRENT_IP). All good."
+fi
+```
+*(Press `Ctrl+O`, then `Enter` to save. Then `Ctrl+X` to exit).*
+
+### Step 3: Make the Script Executable
+You have to give the Pi permission to run this script as a program:
+```bash
+chmod +x /root/update_pbx_ip.sh
+```
+
+### Step 4: Automate it with Cron (The "Scheduler")
+Now we tell the Raspberry Pi to run this script silently every 5 minutes in the background.
+1. Open the cron scheduler:
+   ```bash
+   crontab -e
+   ```
+   *(If it asks you to choose an editor, press `1` for nano).*
+2. Scroll to the very bottom of the file and paste this line:
+   ```bash
+   */5 * * * * /root/update_pbx_ip.sh > /dev/null 2>&1
+   ```
+3. Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
+
+### Why this is a masterpiece:
+* **Zero Downtime:** If your IP stays the same for 3 months, the script just says "All good" and does absolutely nothing. No unnecessary restarts.
+* **Instant Recovery:** If Tenaga Nasional has a blackout and your office router reboots with a new IP, the script will realize it within 5 minutes, update the PBX, and restore your two-way audio completely automatically. You don't even have to log in.
+
+You can actually test it right now by running `./update_pbx_ip.sh` in your terminal. It should say *"IP change detected"* the first time (since it's creating the text file), and then *"All good"* if you run it a second time. 
+
+---
+
+## Summary of the "Golden Rule" for Two-Way Audio:
+1. **Asterisk must know its Public IP** (Numeric, not just the Domain name).
+2. **The Router must permit UDP 10000-20000** (The media stream).
+3. **The Extensions must have "Direct Media" OFF** (Forces the Pi to bridge the audio).
+
+> **Pro-Tip for your report:** "Implemented a Dynamic DNS (DDNS) resolution strategy within the Asterisk SIP stack to mitigate NAT-induced one-way audio. By utilizing the Dynamic Host polling method (120s interval), the PBX maintains reachability even when the WAN gateway cycles its Public IP address."
+
