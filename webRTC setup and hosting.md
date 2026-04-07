@@ -315,3 +315,15 @@ You can actually test it right now by running `./update_pbx_ip.sh` in your termi
 
 > **Pro-Tip for your report:** "Implemented a Dynamic DNS (DDNS) resolution strategy within the Asterisk SIP stack to mitigate NAT-induced one-way audio. By utilizing the Dynamic Host polling method (120s interval), the PBX maintains reachability even when the WAN gateway cycles its Public IP address."
 
+The Final Step: Keep the Firewall Open
+To ensure Asterisk can actually send the messages through the Ruijie/5G firewalls, we need to tell it to "ping" your phone constantly so the firewall doesn't go to sleep.
+
+Log into FreePBX -> Applications -> Extensions -> Edit 101.
+
+Go to the Advanced tab.
+
+Scroll down and find Qualify. Set it to Yes.
+
+Right below it, find Qualify Frequency and change it from 60 to 15.
+
+Click Submit, Apply Config, and run fwconsole restart.
