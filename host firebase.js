@@ -71,16 +71,15 @@
     <p style="margin-bottom: 2px; font-size: 12px;">Speaker Level:</p>
     <div id="speakerBar"><div class="level" id="speakerLevel"></div></div>
 
-    <audio id="remoteAudio" autoplay></audio>
+<audio id="remoteAudio" autoplay playsinline></audio>
   </div>
 
   <div id="log" style="margin-top:20px; height:150px; overflow-y:scroll; border:1px solid #ccc; padding:10px; font-size: 0.85em; background: #f8f9fa;"></div>
 </div>
 
 <script>
-let ua = null, session = null;
+let ua = null, session = null, localStream = null;
 
-// Fix 1: Removed the fake TURN server so it doesn't timeout the ICE gathering
 const pcConfig = {
   iceServers: [ ],
   iceTransportPolicy: 'all',
@@ -102,10 +101,27 @@ function updateStatus(text, cls) {
   el.className = `status ${cls}`;
 }
 
+// YOUR original working audio binder!
 function attachPeerConnectionEvents(pc) {
   pc.addEventListener("iceconnectionstatechange", () => {
     log("❄️ ICE Connection: " + pc.iceConnectionState);
+    
+    // THE AUTO-HANGUP DETECTOR:
+    if (pc.iceConnectionState === "disconnected" || 
+        pc.iceConnectionState === "failed" || 
+        pc.iceConnectionState === "closed") {
+        
+        log("⚠️ Phone hung up! Auto-closing...");
+        
+        // I ADDED THIS: It forces JsSIP to cleanly kill the Ghost Session so your next call doesn't break!
+        if (session) {
+            try { session.terminate(); } catch(e) {} 
+        }
+        
+        resetCallUI(); 
+    }
   });
+
   pc.addEventListener("track", (ev) => {
     if (ev.streams[0]) {
       document.getElementById("remoteAudio").srcObject = ev.streams[0];
@@ -134,7 +150,7 @@ function connect() {
     password: password,
     display_name: user,
     register: true,
-    session_timers: false
+    session_timers: true 
   });
 
   ua.on('connected', () => log("🔗 WebSocket Connected"));
@@ -147,19 +163,24 @@ function connect() {
     document.getElementById("disconnectBtn").disabled = false;
   });
 
-  // Fix 2: Added error handler to catch wrong passwords
   ua.on('registrationFailed', (e) => {
     log("❌ Registration Failed: " + e.cause);
     updateStatus("Registration Failed", "disconnected");
   });
 
   ua.on('newRTCSession', (data) => {
+    if (session && session !== data.session) {
+        data.session.terminate();
+        return;
+    }
+
     session = data.session;
     log(data.originator === 'remote' ? "📞 Incoming Call Ringing..." : "📤 Dialing out...");
 
     if (data.originator === 'remote') {
       document.getElementById("answerBtn").disabled = false;
       document.getElementById("hangupBtn").disabled = false;
+      document.getElementById("callBtn").disabled = true; // Lock Call Button
     }
 
     session.on('confirmed', () => {
@@ -181,12 +202,20 @@ function call() {
     return;
   }
 
-  // Fix 3: Pull the target extension from the input box instead of hardcoding 1001
+  if (session) {
+    log("⚠️ Already in a call.");
+    return;
+  }
+
   const targetExt = document.getElementById('targetExt').value;
   if(!targetExt) {
       alert("Please enter an extension to call (like *43)");
       return;
   }
+
+  // Lock UI
+  document.getElementById("callBtn").disabled = true;
+  document.getElementById("targetExt").disabled = true;
 
   const server = document.getElementById('sipServer').value;
   const targetUri = `sip:${targetExt}@${server}`;
@@ -201,6 +230,7 @@ function call() {
   document.getElementById("hangupBtn").disabled = false;
 
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    localStream = stream; // Save mic
     visualizeAudio(stream, "micLevel");
   }).catch(err => log("🎤 Mic error: " + err.message));
 }
@@ -212,11 +242,14 @@ function answerCall() {
     pcConfig: pcConfig
   });
   log("✅ Answered call");
+  document.getElementById("answerBtn").disabled = true;
+
   setTimeout(() => {
     if (session.connection) attachPeerConnectionEvents(session.connection);
   }, 500);
 
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    localStream = stream; // Save mic
     visualizeAudio(stream, "micLevel");
   }).catch(err => log("🎤 Mic error: " + err.message));
 }
@@ -238,9 +271,34 @@ function resetCallUI() {
   document.getElementById("callStatus").textContent = "Ready";
   document.getElementById("answerBtn").disabled = true;
   document.getElementById("hangupBtn").disabled = true;
-  document.getElementById("remoteAudio").srcObject = null;
+  
+  // Unlock UI for the next call
+  document.getElementById("callBtn").disabled = false;
+  document.getElementById("targetExt").disabled = false;
+
+  // Kill Speakers
+  const remoteAudio = document.getElementById("remoteAudio");
+  if (remoteAudio.srcObject) {
+    remoteAudio.srcObject.getTracks().forEach(t => t.stop());
+    remoteAudio.srcObject = null;
+  }
+
+  // Kill Microphone
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+
+  document.getElementById("micLevel").style.width = "0%";
+  document.getElementById("speakerLevel").style.width = "0%";
+
+  // I ADDED THIS: Failsafe to guarantee no ghost sessions survive
+  if (session) {
+      try { session.terminate(); } catch(e) {}
+  }
+
   session = null;
-  log("📴 Call ended");
+  log("📴 Call ended. Memory cleared.");
 }
 
 function visualizeAudio(stream, barId) {
