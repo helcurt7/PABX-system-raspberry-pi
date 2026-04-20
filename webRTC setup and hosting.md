@@ -327,3 +327,204 @@ Scroll down and find Qualify. Set it to Yes.
 Right below it, find Qualify Frequency and change it from 60 to 15.
 
 Click Submit, Apply Config, and run fwconsole restart.
+
+
+
+# Fix: JsSIP Incoming Call — No Audio / Track Event Never Fires
+
+> **TL;DR:** For incoming WebRTC calls via JsSIP 3.x, the `track` event on the `RTCPeerConnection` fires *before* you can attach a listener to it. The fix is to poll `session.connection` immediately before calling `session.answer()` and hook the `track` event the instant the PC object exists.
+
+---
+
+## The Symptom
+
+Outgoing calls work perfectly. Incoming calls connect (ICE state reaches `connected`, bytes are received), but there is **zero audio**. The log looks like this:
+
+```
+🗣️ Call CONFIRMED — SDP complete
+Post-confirm check — srcObject: NULL
+Post-confirm check — paused: false
+❌ NO STREAM at all after confirmed — track event never fired!
+```
+
+You can confirm RTP packets are arriving in the browser's WebRTC internals (`chrome://webrtc-internals`) — `bytesReceived` climbs, but `audioLevel` stays at 0. The audio element's `srcObject` is never set, so the browser decodes the packets into nothing.
+
+---
+
+## Root Cause
+
+### How JsSIP creates the PeerConnection
+
+For **outgoing** calls, the flow is clean and predictable:
+
+```
+ua.call() 
+  → JsSIP fires `peerconnection` event          ← you attach track listener here
+  → ICE / SDP exchange
+  → remote `track` event fires                  ← listener catches it ✅
+```
+
+For **incoming** calls, the flow is different:
+
+```
+ua.on('newRTCSession') fires
+  → you attach session.on('peerconnection', ...)
+  → you call session.answer()
+    → JsSIP creates RTCPeerConnection INSIDE answer()
+    → JsSIP fires `peerconnection` event SYNCHRONOUSLY during answer()
+    → Before your callback even runs, Asterisk's SDP is already processed
+    → remote `track` event fires IMMEDIATELY on the new PC
+  → your peerconnection callback finally runs   ← too late, track already fired ❌
+```
+
+The `peerconnection` event and the `track` event are emitted so close together during `session.answer()` that by the time your `peerconnection` handler attaches a `track` listener, the track has already arrived and been silently discarded.
+
+### Why bytes arrive but audio is silent
+
+The browser *is* receiving and decoding RTP. But `remoteAudio.srcObject` is never set because `attachRemoteStream()` is never called (the `track` event was missed). The decoded audio has nowhere to go.
+
+---
+
+## The Fix
+
+Poll `session.connection` on a short interval **before** calling `session.answer()`. The moment JsSIP internally creates the `RTCPeerConnection`, the poller grabs it and attaches the `track` listener — guaranteed to be in place before any tracks arrive.
+
+### Core logic
+
+```javascript
+let pcPoller = null;
+let pcAttached = false;
+
+function startPCPoller() {
+  if (pcPoller) { clearInterval(pcPoller); pcPoller = null; }
+  pcAttached = false;
+  let attempts = 0;
+
+  pcPoller = setInterval(() => {
+    attempts++;
+
+    // JsSIP 3.x exposes the PC as session.connection
+    const pc = session && (session.connection || session._connection);
+
+    if (pc && !pcAttached) {
+      pcAttached = true;
+      clearInterval(pcPoller);
+      pcPoller = null;
+      
+      attachPeerConnectionEvents(pc); // attach your track listener here
+
+      // Bonus: catch tracks that arrived before the poller even ran
+      if (pc.getReceivers) {
+        pc.getReceivers().forEach(receiver => {
+          if (receiver.track && receiver.track.kind === 'audio') {
+            const stream = new MediaStream([receiver.track]);
+            receiver.track.addEventListener('unmute', () => attachRemoteStream(stream));
+            attachRemoteStream(stream);
+          }
+        });
+      }
+    }
+
+    if (attempts >= 50) { // 5 second timeout
+      clearInterval(pcPoller);
+      pcPoller = null;
+      console.error('PC poller timed out');
+    }
+  }, 100);
+}
+```
+
+### Where to call it in `answerCall()`
+
+```javascript
+function answerCall() {
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then((stream) => {
+      // ✅ Start polling BEFORE answer() — this is the key
+      startPCPoller();
+
+      session.answer({ mediaStream: stream, pcConfig });
+    });
+}
+```
+
+### Guard against double-attachment
+
+Since both the poller *and* the `peerconnection` event (which still fires for outgoing calls) can call `attachPeerConnectionEvents`, add a guard:
+
+```javascript
+function attachPeerConnectionEvents(pc) {
+  if (pc._eventsAttached) return;
+  pc._eventsAttached = true;
+
+  pc.addEventListener('track', (ev) => {
+    if (ev.track.kind !== 'audio') return;
+    const stream = ev.streams?.[0] ?? new MediaStream([ev.track]);
+    ev.track.addEventListener('unmute', () => attachRemoteStream(stream));
+    attachRemoteStream(stream);
+  });
+
+  // ... iceconnectionstatechange, etc.
+}
+```
+
+---
+
+## Before vs After
+
+| | Before | After |
+|---|---|---|
+| Outgoing call audio | ✅ Works | ✅ Works |
+| Incoming call audio | ❌ Silent | ✅ Works |
+| `track` event caught | ❌ Missed | ✅ Caught via poller |
+| `srcObject` set | ❌ Never | ✅ Set on track arrival |
+| ICE connected | ✅ Yes | ✅ Yes |
+| Bytes received | ✅ Yes | ✅ Yes |
+| Audio level | ❌ 0 | ✅ Non-zero |
+
+---
+
+## Why not just use `session.connection` directly in `newRTCSession`?
+
+```javascript
+// This looks like it should work but doesn't:
+ua.on('newRTCSession', (data) => {
+  session = data.session;
+  if (session.connection) {          // ← this is NULL at this point
+    attachPeerConnectionEvents(session.connection);
+  }
+});
+```
+
+For incoming calls, `session.connection` is `null` until `session.answer()` is called. The PC doesn't exist yet when `newRTCSession` fires. You have to wait until after `answer()` starts executing — which is exactly what the poller does.
+
+---
+
+## Full working example
+
+See [`webrtc-phone.html`](./webrtc-phone.html) for a complete single-file implementation with:
+
+- SIP registration via JsSIP 3.x over WSS
+- Outgoing and incoming call support
+- Mic and speaker level visualisation
+- Audio output device selector (`setSinkId`)
+- Force-play fallback button for autoplay policy
+- Full diagnostic panel
+
+---
+
+## Environment
+
+Tested against:
+- **JsSIP** 3.0.1
+- **Asterisk** with FreePBX, WebRTC transport on port 8089
+- **Chrome** (autoplay policy applies — AudioContext must be resumed inside a user gesture)
+
+---
+
+## References
+
+- [JsSIP `RTCSession` docs](https://jssip.net/documentation/api/session/)
+- [RTCPeerConnection.getReceivers()](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/getReceivers)
+- [Chrome autoplay policy](https://developer.chrome.com/blog/autoplay/)
+- [`HTMLMediaElement.setSinkId()`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/setSinkId)
