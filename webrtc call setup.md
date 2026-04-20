@@ -59,3 +59,41 @@ Because your HTML/JS code is dynamic, you do not need to change a single line of
 4. Click **Connect**. 
 
 You can now call `101` from `103` right there on your own laptop to test browser-to-browser calling, or have `103` call the `1002` desk phone! You can repeat this exact checklist to make as many WebRTC users as the office needs.
+Ah, my bad! You are totally right. We talked so much about the JavaScript side that I completely skipped over the **Asterisk/FreePBX side**. 
+
+You nailed it. It takes two to tango. If Chrome is sending a "Muxed" (combined) audio stream, Asterisk *must* be configured to catch it. If Asterisk has Mux turned off, it will literally look at Chrome's audio packets, say *"What is this?"*, and drop the call.
+
+Here is the exact write-up for the **FreePBX WebRTC Extension Settings**, including the Mux toggle and the other required security toggles. 
+
+---
+
+### The FreePBX WebRTC Extension Checklist
+To make a WebRTC call work, you cannot just use a standard SIP extension. You have to go into the specific extension (e.g., 101, 102) and flip a few deep security switches to turn it into a WebRTC endpoint.
+
+**Where to go:**
+1. Log into FreePBX.
+2. Go to **Applications** -> **Extensions**.
+3. Click the pencil icon to edit your WebRTC extension (e.g., 101).
+4. Click on the **Advanced** tab at the top.
+
+Scroll down through the Advanced tab and make sure these exact settings are flipped. I call these the **"Holy Quaternity" of WebRTC**:
+
+#### 1. Enable rtcp_mux: `Yes`
+* **What it does:** This is the exact setting you remembered! It tells Asterisk to expect the Voice (RTP) and the Statistics (RTCP) to be mashed together on a single port. If this is `No`, Asterisk waits for a second port to open, times out, and kills the audio.
+
+#### 2. Enable AVPF: `Yes`
+* **What it does:** AVPF stands for *Audio-Visual Profile with Feedback*. WebRTC requires lightning-fast feedback about packet loss so it can adjust the audio quality on the fly. Standard SIP doesn't use this, but WebRTC demands it. 
+
+#### 3. Enable ICE Support: `Yes`
+* **What it does:** We talked a lot about ICE (the maps Chrome uses to find Asterisk). This toggle tells Asterisk to actually read those maps and build the secure tunnel. If this is `No`, Asterisk tries to route the call using old-school IP rules, hitting the 5G firewall and failing.
+
+#### 4. Media Encryption: `DTLS-SRTP`
+* **What it does:** WebRTC absolutely refuses to send unencrypted voice data over the internet. It requires bank-level encryption. 
+    * Set **Media Encryption** to `DTLS-SRTP`.
+    * Right below it, make sure **Enable DTLS** is set to `Yes`.
+    * Ensure **Use Certificate** is set to your active SSL certificate (usually the Let's Encrypt or Default cert).
+
+### The Golden Rule of FreePBX WebRTC
+If you ever create a brand new extension for a laptop or web browser in the future, **always double-check that Advanced tab**. 
+
+By default, FreePBX creates standard desktop-phone extensions with `rtcp_mux`, `AVPF`, and `Encryption` turned **OFF**. You always have to manually go in and flip them to **YES** to allow the browser to connect!
