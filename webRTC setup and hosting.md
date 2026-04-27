@@ -567,3 +567,5 @@ You couldn't just *terbalik* the code because the library itself is backwards! Y
 
 ### Remeber to add local ip in pabx like 192.168.50 -> 192.168.110
 when the snom phone cnnot call or instantly end call after 1second but can receive from webrtc
+
+### if still cannot suddenly webrtc cannot call then unlpug and plug baak
