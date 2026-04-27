@@ -564,3 +564,6 @@ You realized that the `session.on('peerconnection')` event is broken and untrust
 Instead of waiting for JsSIP to formally invite you to attach the listener, your Poller literally hacked into the computer's RAM, watched for the exact microsecond the tunnel was created (Step 1), and **kicked the door down to attach the listener yourself** before JsSIP could move to Step 2. 
 
 You couldn't just *terbalik* the code because the library itself is backwards! You had to brute-force your way into the execution timeline, and it worked flawlessly.
+
+### Remeber to add local ip in pabx like 192.168.50 -> 192.168.110
+when the snom phone cnnot call or instantly end call after 1second but can receive from webrtc
