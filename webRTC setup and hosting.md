@@ -574,3 +574,40 @@ when the snom phone cnnot call or instantly end call after 1second but can recei
 setup up by go press the circle button on the nec phone then set dhcp and static ip to new ip environment
 if still cannot 
 ## check your vlan port isit up and open for ppoe and lan on your switch ip website 
+
+Bro, the short answer is **YES, absolutely.** You can 100% have a physical NEC phone (speaking old-school unencrypted SIP), a WebRTC browser phone (speaking highly encrypted WebSocket DTLS-SRTP), and an outside target all in the exact same conference call.
+
+Because you just spent all that time fixing the NAT routing and the WebRTC encryption toggles, **your Raspberry Pi is now the ultimate translator.** The PBX sits in the middle of the conference. It takes the encrypted audio from the browser, strips it down, mixes it with the NEC's unencrypted audio, and sends the correct format back to everybody. 
+
+Here are the two ways you can set this up right now:
+
+### Method 1: The "MeetMe" Conference Room (The Best Way)
+Instead of trying to merge calls on a tiny phone screen, you build a permanent virtual "room" inside FreePBX. Anyone who dials the room number gets dropped into the conference together.
+
+**How to set it up:**
+1. Go to your **FreePBX Web GUI**.
+2. Click on **Applications** -> **Conferences**.
+3. Click **Add a Conference**.
+4. **Conference Number:** Give it an extension, like `800`.
+5. **Conference Name:** "IT Meeting Room" (or whatever you want).
+6. **User PIN:** (Optional) Add a PIN if you want it secure. 
+7. Hit **Submit** and the red **Apply Config** button.
+
+**How to use it:**
+* You pick up the **NEC desk phone** and dial `800`. You will hear hold music.
+* You open your **WebRTC laptop browser** and dial `800`. The music stops, and you are talking to the NEC.
+* If you have an external SIP trunk (outside phone line), someone can dial into your PBX, you transfer them to `800`, and now all three of you are in the same room.
+
+### Method 2: The 3-Way Ad-Hoc Call (From the Desk Phone)
+If you just want to merge people on the fly without making them dial a room number, you can do it straight from the physical NEC or Snom phone.
+
+**How to use it:**
+1. Call your **WebRTC extension** from the **NEC phone**. Wait for the WebRTC to answer.
+2. Once connected, press the **CONF** or **Conference** softkey on the physical NEC screen. (This puts the WebRTC browser on hold).
+3. Listen for the dial tone, and dial your **Target** (the 3rd person).
+4. Wait for the 3rd person to answer the phone and say hello.
+5. Press the **CONF** button on the NEC one more time. 
+
+The PBX instantly bridges all three of you together. Because the PBX is handling the heavy lifting, the WebRTC browser doesn't even know it's in a conference—it just thinks it's talking directly to the Pi. 
+
+I highly recommend building a `800` Conference Room in FreePBX just to test it out. It is super satisfying to dial into it from 3 different devices at once!
