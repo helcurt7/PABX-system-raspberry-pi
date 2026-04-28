@@ -3,6 +3,7 @@ Bro, setting up another physical NEC phone exactly like your 1002 is going to fe
 Because the physical desk phone sits safely inside the office on the same local network as your Raspberry Pi, you do not need any of the DuckDNS, SSL certificates, or WebRTC encryption hacks. 
 
 Here is the exact setup to clone the "1002 hardware profile" for a new NEC phone (let's call it extension `1004`).
+<img width="902" height="812" alt="image" src="https://github.com/user-attachments/assets/10225074-10a4-4ed2-bd7a-adbc41f4644f" />
 
 ### Part 1: The FreePBX "Hardware" Profile
 1. Log into FreePBX, go to **Applications > Extensions**, and **Add New PJSIP Extension**.
