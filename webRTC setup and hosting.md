@@ -565,7 +565,12 @@ Instead of waiting for JsSIP to formally invite you to attach the listener, your
 
 You couldn't just *terbalik* the code because the library itself is backwards! You had to brute-force your way into the execution timeline, and it worked flawlessly.
 
-### Remeber to add local ip in pabx like 192.168.50 -> 192.168.110
+## Remeber to add local ip in pabx like 192.168.50 -> 192.168.110
 when the snom phone cnnot call or instantly end call after 1second but can receive from webrtc
 
-### if still cannot suddenly webrtc cannot call then unlpug and plug baak
+## if still cannot suddenly webrtc cannot call then unlpug and plug baak
+
+## if see nec phone port picture no shaded black and ip website does not load up
+setup up by go press the circle button on the nec phone then set dhcp and static ip to new ip environment
+if still cannot 
+## check your vlan port isit up and open for ppoe and lan on your switch ip website 
