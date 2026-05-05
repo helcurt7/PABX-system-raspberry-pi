@@ -145,7 +145,6 @@ Because you removed the Cisco proprietary software, the phone no longer has a "D
 
 *** 
 
-Drop that on GitHub or a VoIP forum and you will instantly become a legend to anyone trying to save these old phones from the e-waste bin!</MAC></MAC>
 
 
 Bro, setting up the GUI is the crucial final piece to make sure your PBX plays nice with the dinosaur long-term. You already nailed the hard part by forcing the network to accept it. Now we just need to make sure the PBX's internal switchboard is configured specifically to handle a legacy 20-year-old device.
