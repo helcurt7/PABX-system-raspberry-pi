@@ -9,7 +9,7 @@ The Cisco 7940 IP Phone is a 20-year-old enterprise device originally designed t
 ### Prerequisites (What you need before starting)
 1. **The Hardware:** A Cisco 7940 phone, an Ethernet cable, and a PoE (Power over Ethernet) switch or a 48V Cisco power brick. 
 2. **The Server:** A Raspberry Pi (or PC) running FreePBX / Incredible PBX. (In this guide, our PBX IP is `192.168.50.32`).
-3. **The Firmware:** The official Cisco SIP firmware archive (e.g., `P0S3-8-12-00.tar`). You must find and download this yourself.
+3. **The Firmware:** The official Cisco SIP firmware archive (e.g., `P0S3-8-12-00.tar`). You must find and download this yourself.https://www.firewall.cx/downloads/cisco-7940-7960-sccp-sip-firmware-v8-1-2-sr2-v3-8-12/download.html
 4. **The Phone's MAC Address:** Flip the phone over and write down the 12-character MAC address printed on the sticker (e.g., `00258417CBB7`). 
 
 ---
