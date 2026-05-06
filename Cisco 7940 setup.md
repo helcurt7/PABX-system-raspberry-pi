@@ -204,3 +204,15 @@ To help visualize this, I've built an interactive mockup of the FreePBX extensio
 
 <img width="830" height="660" alt="image" src="https://github.com/user-attachments/assets/11e69cac-4853-4252-b01c-d39a11836e78" />
 <img width="804" height="704" alt="image" src="https://github.com/user-attachments/assets/34cec762-af10-4c46-be74-01c200deab9e" />
+<img width="907" height="835" alt="image" src="https://github.com/user-attachments/assets/87569bcf-2d44-4a64-9b61-5bb5466634e6" />
+
+<img width="859" height="529" alt="image" src="https://github.com/user-attachments/assets/2ab93fed-f516-433c-8614-f05fc03d14bd" />
+<img width="943" height="842" alt="image" src="https://github.com/user-attachments/assets/12a7ce3a-7534-41d1-b744-ed3024f1cb20" />
+<img width="911" height="875" alt="image" src="https://github.com/user-attachments/assets/2056d468-b875-4ce1-a860-8873a2949b76" />
+<img width="892" height="801" alt="image" src="https://github.com/user-attachments/assets/1a425554-f64b-43eb-8957-ae113a263f0e" />
+
+<img width="890" height="910" alt="image" src="https://github.com/user-attachments/assets/63f582c9-aec8-4c3e-b58d-1cad704e31db" />
+<img width="944" height="803" alt="image" src="https://github.com/user-attachments/assets/81556cf2-4a1d-4aae-a84b-d77ca9232e6e" />
+<img width="883" height="789" alt="image" src="https://github.com/user-attachments/assets/8ac25bff-339c-4771-bffd-5a20f1d8ddf6" />
+
+
