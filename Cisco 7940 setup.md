@@ -77,7 +77,7 @@ echo "P0S3-8-12-00" > /srv/tftp/OS79XX.TXT
 **3. Create the SIP Configuration File (`SIP<MAC>.cnf`):**
 Because you are upgrading to SIP, the phone will look for a text file starting with `SIP` and ending in its MAC address. *Make sure the MAC address is all uppercase.*
 
-Run this block, changing the MAC, IPs, and passwords to match yours:
+Run this block, changing the MAC, IPs, and passwords to match yours: timeregister lesser avoid one way calling add nat_enable: "1"
 ```bash
 cat << 'EOF' > /srv/tftp/SIP00258417CBB7.cnf
 image_version: "P0S3-8-12-00"
@@ -89,7 +89,8 @@ line1_password: "1100"
 proxy1_address: "192.168.50.32"
 proxy1_port: "5060"
 proxy_register: "1"
-timer_register: "120"
+timer_register: "30"
+nat_enable: "1"
 messages_uri: "*97"
 EOF
 ```
